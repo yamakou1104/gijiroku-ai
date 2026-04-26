@@ -1,0 +1,154 @@
+# ui/app.py
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+from ui.widgets import ModeButton, StatusBar, StorageSelector
+
+class App:
+    def __init__(self, config, recorder_factory, uploader_factory, transcriber, generator):
+        self._config = config
+        self._recorder_factory = recorder_factory
+        self._uploader_factory = uploader_factory
+        self._transcriber = transcriber
+        self._generator = generator
+        self._recorder = None
+        self._session_dir = None
+        self._root = None
+
+    def run(self):
+        self._root = tk.Tk()
+        self._root.title("議事録AI")
+        self._root.geometry("450x350")
+        self._root.resizable(False, False)
+
+        self._build_ui()
+        self._root.mainloop()
+
+    def _build_ui(self):
+        title_frame = tk.Frame(self._root)
+        title_frame.pack(fill="x", pady=(10, 0))
+        tk.Label(
+            title_frame, text="議事録AI", font=("Meiryo UI", 18, "bold")
+        ).pack(side="left", padx=20)
+
+        self._status_bar = StatusBar(title_frame)
+        self._status_bar.pack(side="right", padx=20)
+
+        self._storage_selector = StorageSelector(
+            self._root, on_change=self._on_storage_change
+        )
+        self._storage_selector.pack(pady=10)
+        self._storage_selector.value = self._config.get("storage_provider")
+
+        button_frame = tk.Frame(self._root)
+        button_frame.pack(pady=10, padx=20, fill="x")
+
+        self._face_btn = ModeButton(
+            button_frame,
+            title="対面",
+            icon_text="\U0001f3a4",
+            description="マイク音声のみ",
+            command=self._start_face_to_face,
+        )
+        self._face_btn.pack(side="left", expand=True, fill="both", padx=(0, 5))
+
+        self._online_btn = ModeButton(
+            button_frame,
+            title="オンライン",
+            icon_text="\U0001f3a4\U0001f5a5",
+            description="画面+音声",
+            command=self._start_online,
+        )
+        self._online_btn.pack(side="right", expand=True, fill="both", padx=(5, 0))
+
+        self._stop_btn = tk.Button(
+            self._root,
+            text="■ 停止 → 議事録生成",
+            font=("Meiryo UI", 12),
+            command=self._stop_and_generate,
+            state="disabled",
+            bg="#e74c3c",
+            fg="white",
+            height=2,
+        )
+        self._stop_btn.pack(fill="x", padx=20, pady=15)
+
+    def _on_storage_change(self, value):
+        self._config.set("storage_provider", value)
+
+    def _start_face_to_face(self):
+        self._start_recording("face_to_face")
+
+    def _start_online(self):
+        self._start_recording("online")
+
+    def _start_recording(self, mode):
+        mic = self._config.get("mic_device")
+        if not mic:
+            messagebox.showwarning("設定エラー", "マイクデバイスが設定されていません。")
+            return
+
+        self._recorder, self._session_dir = self._recorder_factory(mode)
+        self._recorder.start()
+
+        self._status_bar.set_recording(True)
+        self._status_bar.set_status(f"録音中（{'対面' if mode == 'face_to_face' else 'オンライン'}）")
+        self._stop_btn.configure(state="normal")
+
+    def _stop_and_generate(self):
+        if self._recorder is None:
+            return
+
+        self._recorder.stop()
+        self._status_bar.set_recording(False)
+        self._status_bar.set_status("処理中...")
+        self._stop_btn.configure(state="disabled")
+
+        threading.Thread(target=self._process_pipeline, daemon=True).start()
+
+    def _process_pipeline(self):
+        try:
+            from utils.file_manager import FileManager
+            fm = FileManager(self._session_dir)
+            segments = fm.list_segments(self._session_dir, ".wav")
+
+            self._root.after(0, lambda: self._status_bar.set_status("文字起こし中..."))
+            transcript = self._transcriber.transcribe_all(
+                segments,
+                segment_duration=self._config.get("segment_duration"),
+            )
+
+            transcript_path = os.path.join(self._session_dir, "transcript.txt")
+            with open(transcript_path, "w", encoding="utf-8") as f:
+                f.write(transcript)
+
+            self._root.after(0, lambda: self._status_bar.set_status("議事録生成中..."))
+            minutes = self._generator.generate(transcript)
+
+            minutes_path = os.path.join(self._session_dir, "minutes.md")
+            with open(minutes_path, "w", encoding="utf-8") as f:
+                f.write(minutes)
+
+            self._root.after(0, lambda: self._status_bar.set_status("アップロード中..."))
+            uploader = self._uploader_factory()
+            meeting_name = os.path.basename(self._session_dir)
+            uploader.upload_session(self._session_dir, meeting_name)
+
+            from utils.notification import notify
+            notify("議事録AI", "議事録が完成しました")
+
+            self._root.after(0, self._reset_ui)
+
+        except Exception as e:
+            self._root.after(
+                0,
+                lambda: messagebox.showerror("エラー", f"処理中にエラーが発生しました:\n{e}"),
+            )
+            self._root.after(0, self._reset_ui)
+
+    def _reset_ui(self):
+        self._status_bar.set_status("待機中")
+        self._stop_btn.configure(state="disabled")
+        self._recorder = None
+        self._session_dir = None
