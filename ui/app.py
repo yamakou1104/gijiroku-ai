@@ -1,17 +1,14 @@
 # ui/app.py
-import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 from ui.widgets import ModeButton, StatusBar, StorageSelector
 
 class App:
-    def __init__(self, config, recorder_factory, uploader_factory, transcriber, generator):
+    def __init__(self, config, recorder_factory, pipeline):
         self._config = config
         self._recorder_factory = recorder_factory
-        self._uploader_factory = uploader_factory
-        self._transcriber = transcriber
-        self._generator = generator
+        self._pipeline = pipeline
         self._recorder = None
         self._session_dir = None
         self._root = None
@@ -109,35 +106,10 @@ class App:
 
     def _process_pipeline(self):
         try:
-            from utils.file_manager import FileManager
-            fm = FileManager(self._session_dir)
-            segments = fm.list_segments(self._session_dir, ".wav")
+            def on_status(msg):
+                self._root.after(0, lambda: self._status_bar.set_status(msg))
 
-            self._root.after(0, lambda: self._status_bar.set_status("文字起こし中..."))
-            transcript = self._transcriber.transcribe_all(
-                segments,
-                segment_duration=self._config.get("segment_duration"),
-            )
-
-            transcript_path = os.path.join(self._session_dir, "transcript.txt")
-            with open(transcript_path, "w", encoding="utf-8") as f:
-                f.write(transcript)
-
-            self._root.after(0, lambda: self._status_bar.set_status("議事録生成中..."))
-            minutes = self._generator.generate(transcript)
-
-            minutes_path = os.path.join(self._session_dir, "minutes.md")
-            with open(minutes_path, "w", encoding="utf-8") as f:
-                f.write(minutes)
-
-            self._root.after(0, lambda: self._status_bar.set_status("アップロード中..."))
-            uploader = self._uploader_factory()
-            meeting_name = os.path.basename(self._session_dir)
-            uploader.upload_session(self._session_dir, meeting_name)
-
-            from utils.notification import notify
-            notify("議事録AI", "議事録が完成しました")
-
+            self._pipeline.run(self._session_dir, on_status=on_status)
             self._root.after(0, self._reset_ui)
 
         except Exception as e:
