@@ -11,9 +11,7 @@ from uploader.google_drive import GoogleDriveUploader
 from uploader.onedrive import OneDriveUploader
 from utils.file_manager import FileManager
 
-def create_app():
-    config = Config()
-
+def create_app_with_config(config):
     output_base = config.get("output_dir")
     if not output_base:
         output_base = os.path.join(os.path.expanduser("~"), "gijiroku-ai-data")
@@ -65,9 +63,23 @@ def create_app():
     )
     return app
 
-def main():
-    app = create_app()
+def create_app():
+    config = Config()
+    return create_app_with_config(config)
+
+def _launch_app(config):
+    app = create_app_with_config(config)
     app.run()
+
+def main():
+    config = Config()
+
+    if not config.get("setup_complete"):
+        from ui.setup import SetupWizard
+        wizard = SetupWizard(config, on_complete=lambda: _launch_app(config))
+        wizard.run()
+    else:
+        _launch_app(config)
 
 if __name__ == "__main__":
     main()
