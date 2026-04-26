@@ -63,12 +63,7 @@ class TrayApp:
             self._stop_recording()
 
     def _start_recording(self, mode):
-        result = self._recorder_factory(mode)
-        if isinstance(result, tuple):
-            self._recorder, self._session_dir = result
-        else:
-            self._recorder = result
-            self._session_dir = getattr(result, "session_dir", None)
+        self._recorder, self._session_dir = self._recorder_factory(mode)
         self._recorder.start()
         self._state = State.RECORDING
         self._update_icon()

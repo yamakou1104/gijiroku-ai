@@ -9,7 +9,8 @@ def make_tray_app():
         "mic_device": "Test Mic",
         "segment_duration": 1800,
     }.get(key)
-    recorder_factory = MagicMock()
+    mock_recorder = MagicMock()
+    recorder_factory = MagicMock(return_value=(mock_recorder, "/tmp/session"))
     pipeline = MagicMock()
     monitor = MagicMock()
     return TrayApp(
