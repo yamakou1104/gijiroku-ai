@@ -1,8 +1,6 @@
-# main.py
 import os
 import sys
 from config import Config
-from ui.app import App
 from recorder.audio import AudioRecorder
 from recorder.screen import ScreenRecorder
 from transcriber.gemini import GeminiTranscriber
@@ -10,8 +8,10 @@ from generator.minutes import MinutesGenerator
 from uploader.google_drive import GoogleDriveUploader
 from uploader.onedrive import OneDriveUploader
 from utils.file_manager import FileManager
+from pipeline import Pipeline
 
-def create_app_with_config(config):
+
+def _build_components(config):
     output_base = config.get("output_dir")
     if not output_base:
         output_base = os.path.join(os.path.expanduser("~"), "gijiroku-ai-data")
@@ -28,7 +28,6 @@ def create_app_with_config(config):
         mic = config.get("mic_device")
         segment_duration = config.get("segment_duration")
         session_dir = fm.create_session("会議")
-
         if mode == "face_to_face":
             recorder = AudioRecorder(
                 output_dir=session_dir,
@@ -54,32 +53,55 @@ def create_app_with_config(config):
         uploader.authenticate()
         return uploader
 
+    pipeline = Pipeline(
+        config=config,
+        transcriber=transcriber,
+        generator=generator,
+        uploader_factory=uploader_factory,
+    )
+
+    return recorder_factory, pipeline
+
+
+def _launch_tray(config):
+    from tray.app import TrayApp
+    recorder_factory, pipeline = _build_components(config)
+    app = TrayApp(
+        config=config,
+        recorder_factory=recorder_factory,
+        pipeline=pipeline,
+    )
+    app.run()
+
+
+def _launch_gui(config):
+    from ui.app import App
+    recorder_factory, pipeline = _build_components(config)
     app = App(
         config=config,
         recorder_factory=recorder_factory,
-        uploader_factory=uploader_factory,
-        transcriber=transcriber,
-        generator=generator,
+        pipeline=pipeline,
     )
-    return app
-
-def create_app():
-    config = Config()
-    return create_app_with_config(config)
-
-def _launch_app(config):
-    app = create_app_with_config(config)
     app.run()
+
 
 def main():
     config = Config()
+    use_gui = "--gui" in sys.argv
 
     if not config.get("setup_complete"):
         from ui.setup import SetupWizard
-        wizard = SetupWizard(config, on_complete=lambda: _launch_app(config))
+        if use_gui:
+            wizard = SetupWizard(config, on_complete=lambda: _launch_gui(config))
+        else:
+            wizard = SetupWizard(config, on_complete=lambda: _launch_tray(config))
         wizard.run()
     else:
-        _launch_app(config)
+        if use_gui:
+            _launch_gui(config)
+        else:
+            _launch_tray(config)
+
 
 if __name__ == "__main__":
     main()
