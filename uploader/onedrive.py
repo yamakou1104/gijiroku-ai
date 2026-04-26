@@ -11,6 +11,9 @@ class OneDriveUploader(BaseUploader):
     def __init__(self, client_id, authority=None, token_cache_path=None):
         self._client_id = client_id
         self._authority = authority or "https://login.microsoftonline.com/consumers"
+        if token_cache_path is None:
+            from utils.resource_path import get_app_data_dir
+            token_cache_path = os.path.join(get_app_data_dir(), "onedrive_token_cache.json")
         self._token_cache_path = token_cache_path
         self._access_token = None
 

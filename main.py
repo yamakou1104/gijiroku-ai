@@ -43,12 +43,20 @@ def _build_components(config):
         return recorder, session_dir
 
     def uploader_factory():
+        from utils.resource_path import get_credentials_dir
         provider = config.get("storage_provider")
         if provider == "google_drive":
             creds_path = config.get("google_drive_credentials")
+            if not creds_path:
+                creds_path = os.path.join(get_credentials_dir(), "google_client_secrets.json")
             uploader = GoogleDriveUploader(credentials_path=creds_path)
         else:
             client_id = config.get("onedrive_credentials")
+            if not client_id:
+                import json
+                od_config_path = os.path.join(get_credentials_dir(), "onedrive_config.json")
+                with open(od_config_path) as f:
+                    client_id = json.load(f)["client_id"]
             uploader = OneDriveUploader(client_id=client_id)
         uploader.authenticate()
         return uploader

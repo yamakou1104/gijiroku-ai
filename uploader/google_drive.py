@@ -11,9 +11,10 @@ SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 class GoogleDriveUploader(BaseUploader):
     def __init__(self, credentials_path, token_path=None):
         self._credentials_path = credentials_path
-        self._token_path = token_path or os.path.join(
-            os.path.dirname(credentials_path), "gdrive_token.json"
-        )
+        if token_path is None:
+            from utils.resource_path import get_app_data_dir
+            token_path = os.path.join(get_app_data_dir(), "gdrive_token.json")
+        self._token_path = token_path
         self._service = None
         self._root_folder_id = None
 
