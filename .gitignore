@@ -1,0 +1,8 @@
+credentials/google_client_secrets.json
+credentials/onedrive_config.json
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+*.spec
