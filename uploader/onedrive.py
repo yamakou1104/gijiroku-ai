@@ -149,10 +149,10 @@ class OneDriveUploader(BaseUploader):
                 }
 
                 chunk_resp = retry(
-                    lambda: requests.put(
+                    lambda h=headers, d=chunk_data: requests.put(
                         upload_url,
-                        headers=headers,
-                        data=chunk_data,
+                        headers=h,
+                        data=d,
                         timeout=(10, 300),
                     ),
                     max_retries=5,
@@ -163,6 +163,24 @@ class OneDriveUploader(BaseUploader):
                     ),
                 )
 
+                if chunk_resp.status_code == 404:
+                    raise UploadError(
+                        f"アップロードセッションが期限切れです。再試行してください。"
+                    )
+                if chunk_resp.status_code == 416:
+                    logger.warning("416 Range Not Satisfiable, querying session status")
+                    status_resp = requests.get(upload_url, timeout=(10, 30))
+                    if status_resp.status_code == 200:
+                        next_ranges = status_resp.json().get("nextExpectedRanges", [])
+                        if next_ranges:
+                            next_start = int(next_ranges[0].split("-")[0])
+                            f.seek(next_start)
+                            offset = next_start
+                            logger.info("Resuming upload from byte %d", next_start)
+                            continue
+                    raise UploadError(
+                        f"チャンクアップロード失敗: {chunk_resp.status_code}"
+                    )
                 if chunk_resp.status_code not in (200, 201, 202):
                     raise UploadError(
                         f"チャンクアップロード失敗: {chunk_resp.status_code} {chunk_resp.text}"

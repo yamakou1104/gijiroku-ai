@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 import re
@@ -70,6 +71,16 @@ class AudioRecorder:
             )
         except FileNotFoundError as e:
             raise RecordingError(f"FFmpeg起動失敗: {e}") from e
+        atexit.register(self._cleanup)
+
+    def _cleanup(self):
+        if self._process and self._process.poll() is None:
+            logger.warning("Cleaning up FFmpeg process on exit")
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=5)
+            except Exception:
+                self._process.kill()
 
     def stop(self):
         if self._process is None:
@@ -98,6 +109,10 @@ class AudioRecorder:
         finally:
             if self._process and self._process.returncode is not None:
                 logger.info("FFmpeg exited with code %d", self._process.returncode)
+            try:
+                atexit.unregister(self._cleanup)
+            except Exception:
+                pass
             self._process = None
 
     @staticmethod

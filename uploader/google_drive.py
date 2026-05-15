@@ -124,7 +124,11 @@ class GoogleDriveUploader(BaseUploader):
         )
         response = None
         while response is None:
-            status, response = request.next_chunk()
+            status, response = retry(
+                lambda: request.next_chunk(),
+                max_retries=3,
+                retryable_exceptions=(Exception,),
+            )
             if status:
                 logger.info(
                     "Upload %s: %d%%",

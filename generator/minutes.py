@@ -57,11 +57,18 @@ class MinutesGenerator:
         model = genai.GenerativeModel(self.MODEL)
         prompt = self._build_generation_prompt(transcript)
 
-        response = retry(
-            lambda: model.generate_content(prompt),
-            max_retries=3,
-            retryable_exceptions=(Exception,),
-        )
+        try:
+            response = retry(
+                lambda: model.generate_content(prompt),
+                max_retries=3,
+                retryable_exceptions=(Exception,),
+            )
+        except Exception as e:
+            if "InvalidArgument" in type(e).__name__ or "invalid" in str(e).lower() and "too long" in str(e).lower():
+                raise ValueError(
+                    "文字起こしテキストが長すぎます。テキストを分割してください。"
+                ) from e
+            raise
 
         if not response.candidates:
             logger.warning("Safety filter triggered during minutes generation")

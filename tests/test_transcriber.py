@@ -43,3 +43,36 @@ def test_build_prompt(transcriber):
     prompt = transcriber._build_transcription_prompt()
     assert "話者" in prompt or "speaker" in prompt.lower()
     assert "タイムスタンプ" in prompt or "timestamp" in prompt.lower()
+
+
+@patch("transcriber.gemini.genai")
+def test_transcribe_segment_safety_filter(mock_genai):
+    mock_genai.configure = MagicMock()
+    from transcriber.gemini import GeminiTranscriber
+    t = GeminiTranscriber(api_key="test")
+
+    mock_response = MagicMock()
+    mock_response.candidates = []  # Empty = safety filter triggered
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = mock_response
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    mock_file = MagicMock()
+    mock_file.name = "test-file"
+    mock_genai.upload_file.return_value = mock_file
+
+    result = t.transcribe_segment("/tmp/test.wav")
+    assert "セーフティフィルター" in result
+
+
+@patch("transcriber.gemini.genai")
+def test_transcribe_segment_api_error(mock_genai):
+    mock_genai.configure = MagicMock()
+    from transcriber.gemini import GeminiTranscriber
+    t = GeminiTranscriber(api_key="test")
+
+    mock_genai.upload_file.side_effect = RuntimeError("API error")
+
+    with pytest.raises(RuntimeError, match="API error"):
+        t.transcribe_segment("/tmp/test.wav")

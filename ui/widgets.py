@@ -3,17 +3,14 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
-if sys.platform == "darwin":
-    _FONT_FAMILY = "Hiragino Sans"
-    _EMOJI_FONT = "Apple Color Emoji"
-else:
-    _FONT_FAMILY = _FONT_FAMILY
-    _EMOJI_FONT = _EMOJI_FONT
+_FONT_FAMILY = "Hiragino Sans" if sys.platform == "darwin" else "Meiryo UI"
+_EMOJI_FONT = "Apple Color Emoji" if sys.platform == "darwin" else "Segoe UI Emoji"
 
 class ModeButton(tk.Frame):
     def __init__(self, parent, title, icon_text, description, command=None):
         super().__init__(parent, relief="raised", borderwidth=2, padx=20, pady=20)
         self._command = command
+        self._disabled = False
 
         self._title_label = tk.Label(
             self, text=title, font=(_FONT_FAMILY, 14, "bold")
@@ -34,7 +31,20 @@ class ModeButton(tk.Frame):
         for child in self.winfo_children():
             child.bind("<Button-1>", self._on_click)
 
+    def configure(self, **kwargs):
+        if "state" in kwargs:
+            state = kwargs.pop("state")
+            self._disabled = (state == "disabled")
+            for child in self.winfo_children():
+                try:
+                    child.configure(state=state)
+                except tk.TclError:
+                    pass
+        super().configure(**kwargs)
+
     def _on_click(self, event=None):
+        if self._disabled:
+            return
         if self._command:
             self._command()
 

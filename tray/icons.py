@@ -6,6 +6,7 @@ ICON_SIZE = 44 if sys.platform == "darwin" else 64
 COLORS = {
     "idle": "#607D8B",
     "recording": "#E53935",
+    "grace_period": "#FF9800",
     "processing": "#FDD835",
 }
 

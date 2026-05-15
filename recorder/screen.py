@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 import shutil
@@ -111,6 +112,17 @@ class ScreenRecorder:
             self._video_process.wait()
             self._video_process = None
             raise RecordingError(f"音声プロセス起動失敗: {e}") from e
+        atexit.register(self._cleanup)
+
+    def _cleanup(self):
+        for name, proc in [("video", self._video_process), ("audio", self._audio_process)]:
+            if proc and proc.poll() is None:
+                logger.warning("Cleaning up %s process on exit", name)
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
 
     def stop(self):
         if self._video_process is None:
@@ -139,5 +151,9 @@ class ScreenRecorder:
                 proc.kill()
                 proc.wait()
 
+        try:
+            atexit.unregister(self._cleanup)
+        except Exception:
+            pass
         self._video_process = None
         self._audio_process = None

@@ -159,9 +159,12 @@ class TrayApp:
             self._stop_event.wait(POLL_INTERVAL_SECONDS)
 
     def _open_settings(self):
-        from ui.setup import SetupWizard
-
-        SetupWizard(self._config, on_complete=lambda: None).run()
+        import subprocess
+        import sys
+        subprocess.Popen([sys.executable, "-c",
+            "from config import Config; from ui.setup import SetupWizard; "
+            "SetupWizard(Config(), on_complete=lambda: None).run()"
+        ])
 
     def quit(self):
         self._stop_event.set()

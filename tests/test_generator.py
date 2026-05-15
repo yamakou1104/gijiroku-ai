@@ -33,3 +33,16 @@ def test_generate_sends_transcript(mock_genai, gen):
     gen.generate("test transcript")
     call_args = mock_model.generate_content.call_args[0][0]
     assert "test transcript" in call_args
+
+
+@patch("generator.minutes.genai")
+def test_generate_empty_transcript(mock_genai):
+    mock_genai.configure = MagicMock()
+    from generator.minutes import MinutesGenerator
+    g = MinutesGenerator(api_key="test")
+
+    with pytest.raises(ValueError, match="空です"):
+        g.generate("")
+
+    with pytest.raises(ValueError, match="空です"):
+        g.generate("   ")

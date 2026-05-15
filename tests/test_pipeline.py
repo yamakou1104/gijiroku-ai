@@ -128,3 +128,67 @@ def test_run_upload_failure_preserves_files(tmp_path):
 
     assert os.path.exists(os.path.join(session_dir, "transcript.txt"))
     assert os.path.exists(os.path.join(session_dir, "minutes.md"))
+
+
+def test_run_resumes_from_checkpoint(tmp_path):
+    """Test that pipeline resumes from transcribed checkpoint."""
+    import json
+    config = MagicMock()
+    config.get.side_effect = lambda key: {"segment_duration": 1800}.get(key)
+
+    transcriber = MagicMock()
+    generator = MagicMock()
+    generator.generate.return_value = "# Minutes"
+
+    mock_uploader = MagicMock()
+    uploader_factory = MagicMock(return_value=mock_uploader)
+
+    pipeline = Pipeline(
+        config=config,
+        transcriber=transcriber,
+        generator=generator,
+        uploader_factory=uploader_factory,
+    )
+    session_dir = str(tmp_path / "session")
+    os.makedirs(session_dir)
+    (tmp_path / "session" / "recording_000.wav").write_bytes(b"\x00" * 100)
+
+    # Write transcript and checkpoint
+    transcript_path = os.path.join(session_dir, "transcript.txt")
+    with open(transcript_path, "w") as f:
+        f.write("test transcript")
+
+    checkpoint_path = os.path.join(session_dir, "pipeline_state.json")
+    with open(checkpoint_path, "w") as f:
+        json.dump({"stage": "transcribed", "transcript_path": transcript_path}, f)
+
+    pipeline.run(session_dir)
+
+    # Transcriber should NOT have been called (resumed past transcription)
+    transcriber.transcribe_all.assert_not_called()
+    # Generator should have been called
+    generator.generate.assert_called_once()
+
+
+def test_run_transcription_failure(tmp_path):
+    """Test that transcription failure raises TranscriptionError."""
+    from exceptions import TranscriptionError
+    config = MagicMock()
+    config.get.side_effect = lambda key: {"segment_duration": 1800}.get(key)
+
+    transcriber = MagicMock()
+    transcriber.transcribe_all.side_effect = RuntimeError("API down")
+    generator = MagicMock()
+
+    pipeline = Pipeline(
+        config=config,
+        transcriber=transcriber,
+        generator=generator,
+        uploader_factory=MagicMock(),
+    )
+    session_dir = str(tmp_path / "session")
+    os.makedirs(session_dir)
+    (tmp_path / "session" / "recording_000.wav").write_bytes(b"\x00" * 100)
+
+    with pytest.raises(TranscriptionError, match="文字起こし失敗"):
+        pipeline.run(session_dir)

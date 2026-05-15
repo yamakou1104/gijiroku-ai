@@ -17,6 +17,9 @@ MEETING_BUNDLE_IDS = [
 class MeetingMonitor:
     PATTERNS = MEETING_PATTERNS
 
+    def __init__(self):
+        self._fallback_notified = False
+
     def detect(self):
         titles = self._get_window_titles()
         for title in titles:
@@ -73,6 +76,16 @@ class MeetingMonitor:
             if not any(
                 w.get(Quartz.kCGWindowName) for w in (windows or [])
             ):
+                if not self._fallback_notified:
+                    self._fallback_notified = True
+                    try:
+                        from utils.notification import notify
+                        notify(
+                            "議事録AI",
+                            "画面収録の権限が未付与です。システム設定 > プライバシーとセキュリティ > 画面収録 で許可してください。"
+                        )
+                    except Exception:
+                        pass
                 titles.extend(self._get_titles_macos_fallback())
             return titles
         except ImportError:

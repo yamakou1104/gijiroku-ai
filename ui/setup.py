@@ -8,7 +8,7 @@ import threading
 from recorder.audio import AudioRecorder
 from utils.resource_path import get_credentials_dir, get_app_data_dir
 
-_FONT_FAMILY = "Hiragino Sans" if sys.platform == "darwin" else _FONT_FAMILY
+_FONT_FAMILY = "Hiragino Sans" if sys.platform == "darwin" else "Meiryo UI"
 
 
 class SetupWizard:
@@ -18,6 +18,7 @@ class SetupWizard:
         self._root = None
         self._device_map = {}
         self._frame = None
+        self._blackhole_hint = None
 
     def run(self):
         self._root = tk.Tk()
@@ -59,6 +60,24 @@ class SetupWizard:
             tk.Label(
                 ffmpeg_frame,
                 text=install_msg,
+                font=(_FONT_FAMILY, 8),
+                fg="gray",
+                justify="left",
+            ).pack(anchor="w")
+
+        if sys.platform == "darwin":
+            perm_frame = tk.Frame(frame)
+            perm_frame.pack(anchor="w", fill="x", pady=(5, 10))
+            tk.Label(
+                perm_frame,
+                text="macOS権限の確認",
+                font=(_FONT_FAMILY, 9, "bold"),
+            ).pack(anchor="w")
+            tk.Label(
+                perm_frame,
+                text="システム設定 > プライバシーとセキュリティ で以下を許可してください:\n"
+                     "  • マイク — 音声録音に必要\n"
+                     "  • 画面収録 — オンラインモード・会議検出に必要",
                 font=(_FONT_FAMILY, 8),
                 fg="gray",
                 justify="left",
@@ -262,16 +281,23 @@ class SetupWizard:
                 self._mic_combo.current(0)
 
             if sys.platform == "darwin" and display_names:
+                if self._blackhole_hint:
+                    self._blackhole_hint.destroy()
+                    self._blackhole_hint = None
                 has_blackhole = any("blackhole" in n.lower() for n in display_names)
                 if not has_blackhole:
-                    tk.Label(
+                    self._blackhole_hint = tk.Label(
                         self._frame,
                         text="ヒント: オンラインモードにはBlackHoleが必要です\n"
-                             "  brew install blackhole-2ch",
+                             "  1. brew install blackhole-2ch\n"
+                             "  2. Audio MIDI設定で「複数出力装置」を作成\n"
+                             "  3. BlackHole 2chと内蔵スピーカーを選択\n"
+                             "  4. システム設定 > サウンド > 出力を「複数出力装置」に変更",
                         font=(_FONT_FAMILY, 8),
                         fg="orange",
                         justify="left",
-                    ).pack(anchor="w", pady=(2, 0))
+                    )
+                    self._blackhole_hint.pack(anchor="w", pady=(2, 0))
         except Exception:
             self._device_map = {}
             self._mic_combo["values"] = ["(デバイスを検出できません)"]

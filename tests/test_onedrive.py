@@ -39,3 +39,37 @@ def test_upload_session(mock_post, mock_put, uploader, tmp_path):
 
     uploader.upload_session(str(session_dir), "テスト会議")
     assert uploader.upload_file.call_count == 1
+
+
+def test_upload_large_file_uses_session(tmp_path):
+    """Files > 4MB should use session upload."""
+    with patch("uploader.onedrive.msal"), \
+         patch("uploader.onedrive.requests") as mock_requests:
+        from uploader.onedrive import OneDriveUploader, SIMPLE_UPLOAD_LIMIT
+
+        up = OneDriveUploader.__new__(OneDriveUploader)
+        up._access_token = "test-token"
+        up._token_cache_path = None
+
+        large_file = tmp_path / "large.wav"
+        large_file.write_bytes(b"\x00" * (SIMPLE_UPLOAD_LIMIT + 1))
+
+        # Mock session creation
+        mock_create_resp = MagicMock()
+        mock_create_resp.status_code = 200
+        mock_create_resp.json.return_value = {"uploadUrl": "https://upload.example.com/session"}
+        mock_create_resp.raise_for_status = MagicMock()
+
+        # Mock chunk upload
+        mock_chunk_resp = MagicMock()
+        mock_chunk_resp.status_code = 201
+        mock_chunk_resp.json.return_value = {"id": "file-id"}
+
+        mock_requests.post.return_value = mock_create_resp
+        mock_requests.put.return_value = mock_chunk_resp
+
+        result = up.upload_file(str(large_file), "/test")
+        # Should have called POST to create session
+        mock_requests.post.assert_called_once()
+        # Should have called PUT for chunks
+        assert mock_requests.put.call_count >= 1
