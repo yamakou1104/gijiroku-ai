@@ -33,7 +33,7 @@ python -m pytest tests/test_X.py # Single file
 - `utils/` — Retry (`retry.py`), file management (`file_manager.py`), notifications (`notification.py`), encryption (`crypto.py`), resource paths (`resource_path.py`)
 
 ## Key conventions
-- Python >= 3.10 required
+- Python >= 3.9 required
 - Platform branching via `sys.platform == "darwin"` / `"win32"`
 - Secrets in `~/.gijiroku-ai/.env` (never in config.json); API key auto-migrated from config on startup
 - OAuth tokens encrypted with Fernet (`utils/crypto.py`)

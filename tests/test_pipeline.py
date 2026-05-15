@@ -192,3 +192,18 @@ def test_run_transcription_failure(tmp_path):
 
     with pytest.raises(TranscriptionError, match="文字起こし失敗"):
         pipeline.run(session_dir)
+
+
+def test_run_nonexistent_session_dir(tmp_path):
+    from exceptions import PipelineError
+    config = MagicMock()
+    pipeline = Pipeline(
+        config=config,
+        transcriber=MagicMock(),
+        generator=MagicMock(),
+        uploader_factory=MagicMock(),
+    )
+    bad_dir = str(tmp_path / "does_not_exist")
+
+    with pytest.raises(PipelineError, match="セッションディレクトリが存在しません"):
+        pipeline.run(bad_dir)

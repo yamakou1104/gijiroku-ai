@@ -73,3 +73,115 @@ def test_upload_large_file_uses_session(tmp_path):
         mock_requests.post.assert_called_once()
         # Should have called PUT for chunks
         assert mock_requests.put.call_count >= 1
+
+
+def test_upload_session_416_invalid_next_range():
+    """Invalid nextExpectedRanges format raises UploadError."""
+    from exceptions import UploadError
+
+    up = OneDriveUploader.__new__(OneDriveUploader)
+    up._access_token = "test-token"
+    up._token_cache_path = None
+
+    with patch("uploader.onedrive.requests") as mock_requests, \
+         patch("uploader.onedrive.retry") as mock_retry:
+
+        create_resp = MagicMock()
+        create_resp.status_code = 200
+        create_resp.json.return_value = {"uploadUrl": "https://upload.example.com/s"}
+        create_resp.raise_for_status = MagicMock()
+        mock_requests.post.return_value = create_resp
+
+        chunk_resp = MagicMock()
+        chunk_resp.status_code = 416
+        mock_retry.return_value = chunk_resp
+
+        status_resp = MagicMock()
+        status_resp.status_code = 200
+        status_resp.json.return_value = {"nextExpectedRanges": ["not-a-number"]}
+        mock_requests.get.return_value = status_resp
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(b"\x00" * (5 * 1024 * 1024))
+            large_path = f.name
+        try:
+            with pytest.raises(UploadError, match="不正なnextExpectedRanges"):
+                up.upload_file(large_path, "/test")
+        finally:
+            os.unlink(large_path)
+
+
+def test_upload_session_416_offset_exceeds_filesize():
+    """nextExpectedRanges offset >= file_size raises UploadError."""
+    from exceptions import UploadError
+
+    up = OneDriveUploader.__new__(OneDriveUploader)
+    up._access_token = "test-token"
+    up._token_cache_path = None
+
+    with patch("uploader.onedrive.requests") as mock_requests, \
+         patch("uploader.onedrive.retry") as mock_retry:
+
+        create_resp = MagicMock()
+        create_resp.status_code = 200
+        create_resp.json.return_value = {"uploadUrl": "https://upload.example.com/s"}
+        create_resp.raise_for_status = MagicMock()
+        mock_requests.post.return_value = create_resp
+
+        chunk_resp = MagicMock()
+        chunk_resp.status_code = 416
+        mock_retry.return_value = chunk_resp
+
+        status_resp = MagicMock()
+        status_resp.status_code = 200
+        status_resp.json.return_value = {"nextExpectedRanges": ["99999999-"]}
+        mock_requests.get.return_value = status_resp
+
+        import tempfile
+        file_size = 5 * 1024 * 1024
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(b"\x00" * file_size)
+            large_path = f.name
+        try:
+            with pytest.raises(UploadError, match="チャンクアップロード失敗"):
+                up.upload_file(large_path, "/test")
+        finally:
+            os.unlink(large_path)
+
+
+def test_upload_session_416_negative_offset():
+    """Negative nextExpectedRanges offset (e.g. '-5-100') fails parsing and raises UploadError."""
+    from exceptions import UploadError
+
+    up = OneDriveUploader.__new__(OneDriveUploader)
+    up._access_token = "test-token"
+    up._token_cache_path = None
+
+    with patch("uploader.onedrive.requests") as mock_requests, \
+         patch("uploader.onedrive.retry") as mock_retry:
+
+        create_resp = MagicMock()
+        create_resp.status_code = 200
+        create_resp.json.return_value = {"uploadUrl": "https://upload.example.com/s"}
+        create_resp.raise_for_status = MagicMock()
+        mock_requests.post.return_value = create_resp
+
+        chunk_resp = MagicMock()
+        chunk_resp.status_code = 416
+        mock_retry.return_value = chunk_resp
+
+        status_resp = MagicMock()
+        status_resp.status_code = 200
+        status_resp.json.return_value = {"nextExpectedRanges": ["-5-100"]}
+        mock_requests.get.return_value = status_resp
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(b"\x00" * (5 * 1024 * 1024))
+            large_path = f.name
+        try:
+            with pytest.raises(UploadError, match="不正なnextExpectedRanges"):
+                up.upload_file(large_path, "/test")
+        finally:
+            os.unlink(large_path)

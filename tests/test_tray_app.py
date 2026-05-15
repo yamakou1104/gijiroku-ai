@@ -120,3 +120,26 @@ def test_start_face_to_face_noop_when_recording():
 
     app.start_face_to_face()
     assert app._recorder_factory.call_count == 1
+
+
+def test_run_pipeline_returns_early_when_session_dir_is_none():
+    app = make_tray_app()
+    app._state = State.PROCESSING
+    app._session_dir = None
+    app._run_pipeline()
+    assert app.state == State.IDLE
+    app._pipeline.run.assert_not_called()
+
+
+def test_run_pipeline_clears_session_dir_preventing_duplicate():
+    app = make_tray_app()
+    app._state = State.PROCESSING
+    app._session_dir = "/tmp/test"
+    app._pipeline.run.return_value = None
+    app._run_pipeline()
+    assert app.state == State.IDLE
+
+    app._state = State.PROCESSING
+    app._run_pipeline()
+    assert app.state == State.IDLE
+    assert app._pipeline.run.call_count == 1

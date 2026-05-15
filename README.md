@@ -13,7 +13,7 @@
 
 ## 動作要件
 
-- Python 3.10 以上
+- Python 3.9 以上
 - FFmpeg（録音・録画に必要）
 - Gemini API キー（[Google AI Studio](https://aistudio.google.com/) で取得）
 - macOS の場合: BlackHole（オンライン会議のシステムオーディオキャプチャに必要、`brew install blackhole-2ch`）

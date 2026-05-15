@@ -7,7 +7,7 @@ name = "gijiroku-ai"
 version = "0.1.0"
 description = "会議の録音・文字起こし・議事録生成を自動で行うデスクトップアプリ"
 requires-python = ">=3.9"
-readme = "DESIGN.md"
+readme = "README.md"
 
 dependencies = [
     "google-genai>=1.0.0",

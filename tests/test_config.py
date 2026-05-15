@@ -19,6 +19,7 @@ def test_default_values(config_path):
     assert cfg.get("gemini_api_key") == ""
     assert cfg.get("mic_device") == ""
     assert cfg.get("segment_duration") == 1800
+    assert cfg.get("setup_complete") is False
 
 def test_set_and_get(config_path):
     cfg = Config(config_path)
