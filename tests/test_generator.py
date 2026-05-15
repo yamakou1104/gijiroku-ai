@@ -52,3 +52,38 @@ def test_generate_empty_transcript(mock_client):
 
     with pytest.raises(ValueError, match="空です"):
         g.generate("   ")
+
+
+def test_generate_safety_filter(gen):
+    gen._client.models.generate_content.return_value = MagicMock(
+        candidates=[], text="fallback"
+    )
+    result = gen.generate("test transcript")
+    assert "セーフティフィルター" in result
+
+
+def test_generate_invalid_argument_too_long(mock_client):
+    g = MinutesGenerator(api_key="test")
+
+    class InvalidArgumentError(Exception):
+        pass
+
+    g._client.models.generate_content.side_effect = InvalidArgumentError(
+        "input too long for model"
+    )
+    with pytest.raises(ValueError, match="長すぎます"):
+        g.generate("test transcript")
+
+
+def test_generate_invalid_argument_not_too_long(mock_client):
+    """InvalidArgument without 'too long' should NOT be caught as text-too-long."""
+    g = MinutesGenerator(api_key="test")
+
+    class InvalidArgumentError(Exception):
+        pass
+
+    g._client.models.generate_content.side_effect = InvalidArgumentError(
+        "bad request format"
+    )
+    with pytest.raises(InvalidArgumentError):
+        g.generate("test transcript")

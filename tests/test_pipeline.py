@@ -207,3 +207,27 @@ def test_run_nonexistent_session_dir(tmp_path):
 
     with pytest.raises(PipelineError, match="セッションディレクトリが存在しません"):
         pipeline.run(bad_dir)
+
+
+def test_run_generation_failure(tmp_path):
+    from exceptions import GenerationError
+    config = MagicMock()
+    config.get.side_effect = lambda key: {"segment_duration": 1800}.get(key)
+
+    transcriber = MagicMock()
+    transcriber.transcribe_all.return_value = "test transcript"
+    generator = MagicMock()
+    generator.generate.side_effect = RuntimeError("model error")
+
+    pipeline = Pipeline(
+        config=config,
+        transcriber=transcriber,
+        generator=generator,
+        uploader_factory=MagicMock(),
+    )
+    session_dir = str(tmp_path / "session")
+    os.makedirs(session_dir)
+    (tmp_path / "session" / "recording_000.wav").write_bytes(b"\x00" * 100)
+
+    with pytest.raises(GenerationError, match="議事録生成失敗"):
+        pipeline.run(session_dir)

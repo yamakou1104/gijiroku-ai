@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def notify(title, message, timeout=10):
     try:
         from plyer import notification as plyer_notification
@@ -9,4 +14,4 @@ def notify(title, message, timeout=10):
             timeout=timeout,
         )
     except Exception:
-        print(f"[通知] {title}: {message}")
+        logger.info("[通知] %s: %s", title, message)

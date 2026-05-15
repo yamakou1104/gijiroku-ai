@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 
@@ -7,7 +6,7 @@ from urllib.parse import quote
 import msal
 import requests
 
-from exceptions import AuthenticationError, NetworkError, UploadError
+from exceptions import AuthenticationError, UploadError
 from uploader.base import BaseUploader
 from utils.retry import retry
 

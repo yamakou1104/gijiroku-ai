@@ -80,3 +80,29 @@ def test_transcribe_segment_api_error(transcriber):
 
     with pytest.raises(RuntimeError, match="API error"):
         transcriber.transcribe_segment("/tmp/test.wav")
+
+
+def test_adjust_timestamps_with_offset(transcriber):
+    text = "[00:30] Speaker1: こんにちは\n[01:00] Speaker2: はい"
+    result = transcriber._adjust_timestamps(text, offset_minutes=30)
+    assert "[30:30]" in result
+    assert "[31:00]" in result
+
+
+def test_adjust_timestamps_wraps_to_hours(transcriber):
+    text = "[50:00] Speaker1: テスト"
+    result = transcriber._adjust_timestamps(text, offset_minutes=30)
+    assert "[1:20:00]" in result
+
+
+def test_adjust_timestamps_zero_offset_unchanged(transcriber):
+    text = "[05:30] Speaker1: テスト"
+    result = transcriber._adjust_timestamps(text, offset_minutes=0)
+    assert result == text
+
+
+def test_adjust_timestamps_non_timestamp_lines_preserved(transcriber):
+    text = "Some text without timestamps\n[invalid] not a time"
+    result = transcriber._adjust_timestamps(text, offset_minutes=30)
+    assert "Some text without timestamps" in result
+    assert "[invalid] not a time" in result

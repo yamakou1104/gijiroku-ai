@@ -65,7 +65,7 @@ class MinutesGenerator:
                 retryable_exceptions=(Exception,),
             )
         except Exception as e:
-            if "InvalidArgument" in type(e).__name__ or "invalid" in str(e).lower() and "too long" in str(e).lower():
+            if ("InvalidArgument" in type(e).__name__ or "invalid" in str(e).lower()) and "too long" in str(e).lower():
                 raise ValueError(
                     "文字起こしテキストが長すぎます。テキストを分割してください。"
                 ) from e

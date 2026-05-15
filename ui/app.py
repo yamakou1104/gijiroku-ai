@@ -2,7 +2,7 @@ import logging
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 
 from ui.widgets import ModeButton, StatusBar, StorageSelector
 
