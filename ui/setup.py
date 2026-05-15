@@ -324,7 +324,13 @@ class SetupWizard:
             return
 
         mic_value = self._device_map.get(mic_display, mic_display)
-        self._config.set("gemini_api_key", api_key)
+
+        from dotenv import set_key
+        env_path = os.path.join(get_app_data_dir(), ".env")
+        set_key(env_path, "GEMINI_API_KEY", api_key)
+        os.chmod(env_path, 0o600)
+        os.environ["GEMINI_API_KEY"] = api_key
+
         self._config.set("storage_provider", self._storage_var.get())
         self._config.set("mic_device", mic_value)
         self._config.set("setup_complete", True)

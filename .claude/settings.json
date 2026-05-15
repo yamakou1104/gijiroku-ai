@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(*)",
+      "Read",
+      "Edit",
+      "WebFetch"
+    ],
+    "deny": [
+      "Read(/**/.env)",
+      "Read(.env)",
+      "Bash(*.env *)",
+      "Bash(* .env)",
+      "Bash(* .env *)",
+      "Bash(*cat*.env*)",
+      "Bash(*head*.env*)",
+      "Bash(*tail*.env*)",
+      "Bash(*grep*.env*)",
+      "Bash(*less*.env*)",
+      "Bash(*more*.env*)"
+    ]
+  }
+}

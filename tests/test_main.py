@@ -6,9 +6,9 @@ from config import Config
 
 
 @pytest.fixture
-def config(tmp_path):
+def config(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     cfg = Config(str(tmp_path / "config.json"))
-    cfg.set("gemini_api_key", "test-key")
     cfg.set("output_dir", str(tmp_path / "output"))
     cfg.set("mic_device", "TestMic")
     return cfg
@@ -23,7 +23,8 @@ def test_build_components_creates_output_dir(config, tmp_path):
     assert os.path.isdir(output_dir)
 
 
-def test_build_components_no_api_key(tmp_path):
+def test_build_components_no_api_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     from main import _build_components
     cfg = Config(str(tmp_path / "config.json"))
     cfg.set("output_dir", str(tmp_path / "output"))

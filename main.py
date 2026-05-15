@@ -3,6 +3,8 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 
+from dotenv import load_dotenv
+
 from config import Config
 from recorder.audio import AudioRecorder
 from recorder.screen import ScreenRecorder
@@ -14,6 +16,30 @@ from utils.file_manager import FileManager
 from pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _load_env():
+    from utils.resource_path import get_app_data_dir
+
+    env_path = os.path.join(get_app_data_dir(), ".env")
+    load_dotenv(env_path)
+
+
+def _migrate_api_key(config):
+    if os.environ.get("GEMINI_API_KEY"):
+        return
+    old_key = config.get("gemini_api_key")
+    if not old_key:
+        return
+    from dotenv import set_key
+    from utils.resource_path import get_app_data_dir
+
+    env_path = os.path.join(get_app_data_dir(), ".env")
+    set_key(env_path, "GEMINI_API_KEY", old_key)
+    os.chmod(env_path, 0o600)
+    os.environ["GEMINI_API_KEY"] = old_key
+    config.set("gemini_api_key", "")
+    logger.info("API key migrated from config.json to .env")
 
 
 def _setup_logging():
@@ -41,7 +67,7 @@ def _build_components(config):
 
     fm = FileManager(output_base)
 
-    api_key = config.get("gemini_api_key")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     transcriber = GeminiTranscriber(api_key=api_key) if api_key else None
     generator = MinutesGenerator(api_key=api_key) if api_key else None
 
@@ -126,7 +152,10 @@ def main():
     _setup_logging()
     logger.info("議事録AI starting")
 
+    _load_env()
     config = Config()
+    _migrate_api_key(config)
+
     use_gui = "--gui" in sys.argv
 
     if not config.get("setup_complete"):
