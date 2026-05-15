@@ -168,11 +168,15 @@ class OneDriveUploader(BaseUploader):
                     if status_resp.status_code == 200:
                         next_ranges = status_resp.json().get("nextExpectedRanges", [])
                         if next_ranges:
-                            next_start = int(next_ranges[0].split("-")[0])
-                            f.seek(next_start)
-                            offset = next_start
-                            logger.info("Resuming upload from byte %d", next_start)
-                            continue
+                            try:
+                                next_start = int(next_ranges[0].split("-")[0])
+                            except (ValueError, IndexError):
+                                raise UploadError("不正なnextExpectedRanges応答")
+                            if 0 <= next_start < file_size:
+                                f.seek(next_start)
+                                offset = next_start
+                                logger.info("Resuming upload from byte %d", next_start)
+                                continue
                     raise UploadError(
                         f"チャンクアップロード失敗: {chunk_resp.status_code}"
                     )

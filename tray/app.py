@@ -99,6 +99,11 @@ class TrayApp:
     def _run_pipeline(self):
         with self._lock:
             session_dir = self._session_dir
+            self._session_dir = None
+            if session_dir is None:
+                self._state = State.IDLE
+                self._update_icon()
+                return
             self._state = State.PROCESSING
             self._update_icon()
 
@@ -115,7 +120,6 @@ class TrayApp:
                 pass
 
         with self._lock:
-            self._session_dir = None
             self._state = State.IDLE
             self._update_icon()
 

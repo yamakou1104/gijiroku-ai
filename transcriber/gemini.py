@@ -1,6 +1,6 @@
 import logging
 
-import google.generativeai as genai
+from google import genai
 
 from utils.retry import retry
 
@@ -14,7 +14,7 @@ class GeminiTranscriber:
         if not api_key:
             raise ValueError("Gemini APIキーが空です")
         self._api_key = api_key
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
 
     def _build_transcription_prompt(self):
         return (
@@ -30,19 +30,21 @@ class GeminiTranscriber:
         )
 
     def transcribe_segment(self, audio_path):
-        model = genai.GenerativeModel(self.MODEL)
         audio_file = None
         try:
             audio_file = retry(
-                lambda: genai.upload_file(audio_path),
+                lambda: self._client.files.upload(file=audio_path),
                 max_retries=3,
                 retryable_exceptions=(Exception,),
             )
             response = retry(
-                lambda: model.generate_content([
-                    self._build_transcription_prompt(),
-                    audio_file,
-                ]),
+                lambda: self._client.models.generate_content(
+                    model=self.MODEL,
+                    contents=[
+                        self._build_transcription_prompt(),
+                        audio_file,
+                    ],
+                ),
                 max_retries=3,
                 retryable_exceptions=(Exception,),
             )
@@ -53,7 +55,7 @@ class GeminiTranscriber:
         finally:
             if audio_file:
                 try:
-                    genai.delete_file(audio_file.name)
+                    self._client.files.delete(name=audio_file.name)
                 except Exception:
                     logger.warning("Failed to delete uploaded file: %s", audio_path)
 

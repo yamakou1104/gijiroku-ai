@@ -12,6 +12,5 @@ def get_credentials_dir():
 
 def get_app_data_dir():
     app_dir = os.path.join(os.path.expanduser("~"), ".gijiroku-ai")
-    os.makedirs(app_dir, exist_ok=True)
-    os.chmod(app_dir, 0o700)
+    os.makedirs(app_dir, mode=0o700, exist_ok=True)
     return app_dir

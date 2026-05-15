@@ -30,6 +30,8 @@ class Pipeline:
             if on_status:
                 on_status(msg)
 
+        if not os.path.isdir(session_dir):
+            raise PipelineError(f"セッションディレクトリが存在しません: {session_dir}")
         if not self._transcriber:
             raise ConfigurationError("Gemini APIキーが設定されていません")
         if not self._generator:

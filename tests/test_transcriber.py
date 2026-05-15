@@ -1,43 +1,60 @@
 import os
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 from transcriber.gemini import GeminiTranscriber
 
+
 @pytest.fixture
-def transcriber():
+def mock_client():
+    with patch("transcriber.gemini.genai") as mock_genai:
+        mock_c = MagicMock()
+        mock_genai.Client.return_value = mock_c
+        yield mock_c
+
+
+@pytest.fixture
+def transcriber(mock_client):
     return GeminiTranscriber(api_key="test-key")
 
-def test_init_sets_api_key(transcriber):
-    assert transcriber._api_key == "test-key"
 
-@patch("transcriber.gemini.genai")
-def test_transcribe_segment_sends_audio(mock_genai, transcriber, tmp_path):
+def test_init_sets_api_key(mock_client):
+    t = GeminiTranscriber(api_key="test-key")
+    assert t._api_key == "test-key"
+    assert t._client == mock_client
+
+
+def test_transcribe_segment_sends_audio(transcriber, tmp_path):
     wav_file = tmp_path / "test.wav"
     wav_file.write_bytes(b"\x00" * 100)
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(text="Speaker1: こんにちは")
-    mock_genai.GenerativeModel.return_value = mock_model
+    mock_file = MagicMock()
+    mock_file.name = "test-file"
+    transcriber._client.files.upload.return_value = mock_file
+    transcriber._client.models.generate_content.return_value = MagicMock(
+        text="Speaker1: こんにちは", candidates=[MagicMock()]
+    )
 
     result = transcriber.transcribe_segment(str(wav_file))
     assert "こんにちは" in result
-    mock_model.generate_content.assert_called_once()
+    transcriber._client.models.generate_content.assert_called_once()
 
-@patch("transcriber.gemini.genai")
-def test_transcribe_all_combines_segments(mock_genai, transcriber, tmp_path):
+
+def test_transcribe_all_combines_segments(transcriber, tmp_path):
     for i in range(3):
         (tmp_path / f"recording_{i:03d}.wav").write_bytes(b"\x00" * 100)
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text="[00:00] Speaker1: テスト発言"
+    mock_file = MagicMock()
+    mock_file.name = "test-file"
+    transcriber._client.files.upload.return_value = mock_file
+    transcriber._client.models.generate_content.return_value = MagicMock(
+        text="[00:00] Speaker1: テスト発言", candidates=[MagicMock()]
     )
-    mock_genai.GenerativeModel.return_value = mock_model
 
     segments = [str(tmp_path / f"recording_{i:03d}.wav") for i in range(3)]
     result = transcriber.transcribe_all(segments, segment_duration=1800)
     assert isinstance(result, str)
     assert len(result) > 0
+
 
 def test_build_prompt(transcriber):
     prompt = transcriber._build_transcription_prompt()
@@ -45,34 +62,21 @@ def test_build_prompt(transcriber):
     assert "タイムスタンプ" in prompt or "timestamp" in prompt.lower()
 
 
-@patch("transcriber.gemini.genai")
-def test_transcribe_segment_safety_filter(mock_genai):
-    mock_genai.configure = MagicMock()
-    from transcriber.gemini import GeminiTranscriber
-    t = GeminiTranscriber(api_key="test")
-
-    mock_response = MagicMock()
-    mock_response.candidates = []  # Empty = safety filter triggered
-
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
-    mock_genai.GenerativeModel.return_value = mock_model
-
+def test_transcribe_segment_safety_filter(transcriber):
     mock_file = MagicMock()
     mock_file.name = "test-file"
-    mock_genai.upload_file.return_value = mock_file
+    transcriber._client.files.upload.return_value = mock_file
 
-    result = t.transcribe_segment("/tmp/test.wav")
+    mock_response = MagicMock()
+    mock_response.candidates = []
+    transcriber._client.models.generate_content.return_value = mock_response
+
+    result = transcriber.transcribe_segment("/tmp/test.wav")
     assert "セーフティフィルター" in result
 
 
-@patch("transcriber.gemini.genai")
-def test_transcribe_segment_api_error(mock_genai):
-    mock_genai.configure = MagicMock()
-    from transcriber.gemini import GeminiTranscriber
-    t = GeminiTranscriber(api_key="test")
-
-    mock_genai.upload_file.side_effect = RuntimeError("API error")
+def test_transcribe_segment_api_error(transcriber):
+    transcriber._client.files.upload.side_effect = RuntimeError("API error")
 
     with pytest.raises(RuntimeError, match="API error"):
-        t.transcribe_segment("/tmp/test.wav")
+        transcriber.transcribe_segment("/tmp/test.wav")

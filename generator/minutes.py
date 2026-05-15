@@ -1,6 +1,6 @@
 import logging
 
-import google.generativeai as genai
+from google import genai
 
 from utils.retry import retry
 
@@ -14,7 +14,7 @@ class MinutesGenerator:
         if not api_key:
             raise ValueError("Gemini APIキーが空です")
         self._api_key = api_key
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
 
     def _build_generation_prompt(self, transcript):
         return (
@@ -54,12 +54,13 @@ class MinutesGenerator:
         if not transcript or not transcript.strip():
             raise ValueError("文字起こしテキストが空です")
 
-        model = genai.GenerativeModel(self.MODEL)
         prompt = self._build_generation_prompt(transcript)
 
         try:
             response = retry(
-                lambda: model.generate_content(prompt),
+                lambda: self._client.models.generate_content(
+                    model=self.MODEL, contents=prompt
+                ),
                 max_retries=3,
                 retryable_exceptions=(Exception,),
             )
