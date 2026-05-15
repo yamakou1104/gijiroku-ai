@@ -18,7 +18,11 @@
       "Bash(*tail*.env*)",
       "Bash(*grep*.env*)",
       "Bash(*less*.env*)",
-      "Bash(*more*.env*)"
+      "Bash(*more*.env*)",
+      "Read(*gdrive_token*)",
+      "Read(*onedrive_token*)",
+      "Bash(*gdrive_token*)",
+      "Bash(*onedrive_token*)"
     ]
   }
 }

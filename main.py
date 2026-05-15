@@ -24,6 +24,10 @@ def _load_env():
     env_path = os.path.join(get_app_data_dir(), ".env")
     load_dotenv(env_path)
 
+    from utils.crypto import ensure_key
+
+    ensure_key()
+
 
 def _migrate_api_key(config):
     if os.environ.get("GEMINI_API_KEY"):

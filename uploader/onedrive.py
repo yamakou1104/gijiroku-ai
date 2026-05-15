@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-import tempfile
+
 from urllib.parse import quote
 
 import msal
@@ -36,8 +36,9 @@ class OneDriveUploader(BaseUploader):
         cache = msal.SerializableTokenCache()
         if self._token_cache_path and os.path.exists(self._token_cache_path):
             try:
-                with open(self._token_cache_path, "r") as f:
-                    cache.deserialize(f.read())
+                from utils.crypto import read_and_decrypt
+
+                cache.deserialize(read_and_decrypt(self._token_cache_path))
             except Exception as e:
                 logger.warning("Token cache corrupted: %s", e)
 
@@ -69,16 +70,10 @@ class OneDriveUploader(BaseUploader):
         self._access_token = result["access_token"]
 
         if self._token_cache_path and cache.has_state_changed:
-            dir_name = os.path.dirname(self._token_cache_path)
-            os.makedirs(dir_name, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    f.write(cache.serialize())
-                os.replace(tmp, self._token_cache_path)
-            except BaseException:
-                os.unlink(tmp)
-                raise
+            from utils.crypto import encrypt_and_write
+
+            os.makedirs(os.path.dirname(self._token_cache_path), exist_ok=True)
+            encrypt_and_write(self._token_cache_path, cache.serialize())
 
     def _headers(self):
         return {"Authorization": f"Bearer {self._access_token}"}

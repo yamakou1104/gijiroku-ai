@@ -218,8 +218,8 @@ class SetupWizard:
         flow = InstalledAppFlow.from_client_secrets_file(secrets_path, scopes)
         creds = flow.run_local_server(port=0)
 
-        with open(token_path, "w") as f:
-            f.write(creds.to_json())
+        from utils.crypto import encrypt_and_write
+        encrypt_and_write(token_path, creds.to_json())
 
         self._config.set("google_drive_credentials", secrets_path)
         self._config.set("google_drive_token", token_path)
@@ -260,8 +260,8 @@ class SetupWizard:
         )
         app.acquire_token_by_device_flow(flow)
 
-        with open(cache_path, "w") as f:
-            f.write(cache.serialize())
+        from utils.crypto import encrypt_and_write
+        encrypt_and_write(cache_path, cache.serialize())
 
         self._config.set("onedrive_credentials", od_config["client_id"])
         self._config.set("onedrive_token_cache", cache_path)

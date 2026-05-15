@@ -1,6 +1,6 @@
 import logging
 import os
-import tempfile
+
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -32,9 +32,11 @@ class GoogleDriveUploader(BaseUploader):
         creds = None
         if os.path.exists(self._token_path):
             try:
-                creds = Credentials.from_authorized_user_file(
-                    self._token_path, SCOPES
-                )
+                from utils.crypto import read_and_decrypt
+                import json as _json
+
+                creds_data = _json.loads(read_and_decrypt(self._token_path))
+                creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
             except (ValueError, Exception) as e:
                 logger.warning("Token file corrupted, will re-authenticate: %s", e)
                 os.remove(self._token_path)
@@ -63,15 +65,9 @@ class GoogleDriveUploader(BaseUploader):
                 except Exception as e:
                     raise AuthenticationError(f"Google Drive 認証失敗: {e}") from e
 
-            dir_name = os.path.dirname(self._token_path)
-            fd, tmp = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    f.write(creds.to_json())
-                os.replace(tmp, self._token_path)
-            except BaseException:
-                os.unlink(tmp)
-                raise
+            from utils.crypto import encrypt_and_write
+
+            encrypt_and_write(self._token_path, creds.to_json())
 
         self._service = build("drive", "v3", credentials=creds)
         self._ensure_root_folder()
