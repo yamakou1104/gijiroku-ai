@@ -1,6 +1,8 @@
 # ui/setup.py
+import logging
 import os
 import json
+import subprocess
 import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -8,7 +10,31 @@ import threading
 from recorder.audio import AudioRecorder
 from utils.resource_path import get_credentials_dir, get_app_data_dir
 
+logger = logging.getLogger(__name__)
+
 _FONT_FAMILY = "Hiragino Sans" if sys.platform == "darwin" else "Meiryo UI"
+
+
+def _schedule_activate(root):
+    def _activate():
+        try:
+            root.deiconify()
+            root.lift()
+            root.focus_force()
+        except Exception:
+            pass
+        if sys.platform == "darwin":
+            try:
+                subprocess.Popen(
+                    ["osascript", "-e",
+                     f'tell application "System Events" to set frontmost of '
+                     f'the first process whose unix id is {os.getpid()} to true'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+
+    root.after(200, _activate)
 
 
 class SetupWizard:
@@ -21,6 +47,7 @@ class SetupWizard:
         self._blackhole_hint = None
 
     def run(self):
+        logger.info("SetupWizard: creating Tk root")
         self._root = tk.Tk()
         self._root.title("議事録AI - 初回セットアップ")
         self._root.geometry("500x550")
@@ -162,6 +189,8 @@ class SetupWizard:
 
         self._refresh_mics()
         self._check_existing_auth()
+        logger.info("SetupWizard: showing window")
+        _schedule_activate(self._root)
         self._root.mainloop()
 
     def _check_existing_auth(self):

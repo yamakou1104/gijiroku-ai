@@ -160,7 +160,7 @@ def main():
     config = Config()
     _migrate_api_key(config)
 
-    use_gui = "--gui" in sys.argv
+    use_gui = "--gui" in sys.argv or getattr(sys, "_MEIPASS", None) is not None
 
     if not config.get("setup_complete"):
         from ui.setup import SetupWizard

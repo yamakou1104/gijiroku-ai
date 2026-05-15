@@ -4,6 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
+from ui.setup import _schedule_activate
 from ui.widgets import ModeButton, StatusBar, StorageSelector
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class App:
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_ui()
+        _schedule_activate(self._root)
         self._root.mainloop()
 
     def _build_ui(self):
