@@ -1,6 +1,14 @@
 # ui/widgets.py
+import sys
 import tkinter as tk
 from tkinter import ttk
+
+if sys.platform == "darwin":
+    _FONT_FAMILY = "Hiragino Sans"
+    _EMOJI_FONT = "Apple Color Emoji"
+else:
+    _FONT_FAMILY = _FONT_FAMILY
+    _EMOJI_FONT = _EMOJI_FONT
 
 class ModeButton(tk.Frame):
     def __init__(self, parent, title, icon_text, description, command=None):
@@ -8,17 +16,17 @@ class ModeButton(tk.Frame):
         self._command = command
 
         self._title_label = tk.Label(
-            self, text=title, font=("Meiryo UI", 14, "bold")
+            self, text=title, font=(_FONT_FAMILY, 14, "bold")
         )
         self._title_label.pack()
 
         self._icon_label = tk.Label(
-            self, text=icon_text, font=("Segoe UI Emoji", 24)
+            self, text=icon_text, font=(_EMOJI_FONT, 24)
         )
         self._icon_label.pack(pady=5)
 
         self._desc_label = tk.Label(
-            self, text=description, font=("Meiryo UI", 9), fg="gray"
+            self, text=description, font=(_FONT_FAMILY, 9), fg="gray"
         )
         self._desc_label.pack()
 
@@ -35,12 +43,12 @@ class StatusBar(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self._label = tk.Label(
-            self, text="待機中", font=("Meiryo UI", 10), anchor="w"
+            self, text="待機中", font=(_FONT_FAMILY, 10), anchor="w"
         )
         self._label.pack(fill="x", padx=10)
 
         self._rec_indicator = tk.Label(
-            self, text="", font=("Meiryo UI", 10), fg="red"
+            self, text="", font=(_FONT_FAMILY, 10), fg="red"
         )
         self._rec_indicator.pack(side="right", padx=10)
 
@@ -56,7 +64,7 @@ class StorageSelector(tk.Frame):
         super().__init__(parent)
         self._var = tk.StringVar(value="google_drive")
 
-        tk.Label(self, text="保存先:", font=("Meiryo UI", 10)).pack(side="left")
+        tk.Label(self, text="保存先:", font=(_FONT_FAMILY, 10)).pack(side="left")
 
         self._combo = ttk.Combobox(
             self,

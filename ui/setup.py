@@ -1,11 +1,14 @@
 # ui/setup.py
 import os
 import json
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 from recorder.audio import AudioRecorder
 from utils.resource_path import get_credentials_dir, get_app_data_dir
+
+_FONT_FAMILY = "Hiragino Sans" if sys.platform == "darwin" else _FONT_FAMILY
 
 
 class SetupWizard:
@@ -13,6 +16,8 @@ class SetupWizard:
         self._config = config
         self._on_complete = on_complete
         self._root = None
+        self._device_map = {}
+        self._frame = None
 
     def run(self):
         self._root = tk.Tk()
@@ -21,20 +26,52 @@ class SetupWizard:
         self._root.resizable(False, False)
 
         tk.Label(
-            self._root, text="初回セットアップ", font=("Meiryo UI", 16, "bold")
+            self._root, text="初回セットアップ", font=(_FONT_FAMILY, 16, "bold")
         ).pack(pady=15)
 
         frame = tk.Frame(self._root, padx=30)
         frame.pack(fill="both", expand=True)
+        self._frame = frame
+
+        # FFmpeg check
+        import shutil
+        ffmpeg_frame = tk.Frame(frame)
+        ffmpeg_frame.pack(anchor="w", fill="x", pady=(5, 10))
+
+        if shutil.which("ffmpeg"):
+            tk.Label(
+                ffmpeg_frame,
+                text="FFmpeg: インストール済み",
+                font=(_FONT_FAMILY, 9),
+                fg="green",
+            ).pack(anchor="w")
+        else:
+            tk.Label(
+                ffmpeg_frame,
+                text="FFmpeg: 未インストール（必須）",
+                font=(_FONT_FAMILY, 9),
+                fg="red",
+            ).pack(anchor="w")
+            if sys.platform == "darwin":
+                install_msg = "ターミナルで以下を実行:\n  brew install ffmpeg"
+            else:
+                install_msg = "FFmpegをダウンロードしてPATHに追加してください"
+            tk.Label(
+                ffmpeg_frame,
+                text=install_msg,
+                font=(_FONT_FAMILY, 8),
+                fg="gray",
+                justify="left",
+            ).pack(anchor="w")
 
         # Step 1: Gemini API key
-        tk.Label(frame, text="1. Gemini APIキー", font=("Meiryo UI", 11, "bold")).pack(
+        tk.Label(frame, text="1. Gemini APIキー", font=(_FONT_FAMILY, 11, "bold")).pack(
             anchor="w", pady=(10, 2)
         )
         tk.Label(
             frame,
             text="Google AI Studio (aistudio.google.com) から取得",
-            font=("Meiryo UI", 8),
+            font=(_FONT_FAMILY, 8),
             fg="gray",
         ).pack(anchor="w")
         self._api_key_var = tk.StringVar()
@@ -44,7 +81,7 @@ class SetupWizard:
 
         # Step 2: Storage + Auth
         tk.Label(
-            frame, text="2. クラウドストレージ連携", font=("Meiryo UI", 11, "bold")
+            frame, text="2. クラウドストレージ連携", font=(_FONT_FAMILY, 11, "bold")
         ).pack(anchor="w", pady=(10, 2))
 
         self._storage_var = tk.StringVar(value="google_drive")
@@ -75,12 +112,12 @@ class SetupWizard:
         self._auth_btn.pack(side="left")
 
         self._auth_status = tk.Label(
-            auth_frame, text="未連携", font=("Meiryo UI", 9), fg="gray"
+            auth_frame, text="未連携", font=(_FONT_FAMILY, 9), fg="gray"
         )
         self._auth_status.pack(side="left", padx=10)
 
         # Step 3: Microphone
-        tk.Label(frame, text="3. マイクデバイス", font=("Meiryo UI", 11, "bold")).pack(
+        tk.Label(frame, text="3. マイクデバイス", font=(_FONT_FAMILY, 11, "bold")).pack(
             anchor="w", pady=(10, 2)
         )
         self._mic_var = tk.StringVar()
@@ -97,7 +134,7 @@ class SetupWizard:
         tk.Button(
             self._root,
             text="設定を保存して開始",
-            font=("Meiryo UI", 12),
+            font=(_FONT_FAMILY, 12),
             command=self._save,
             bg="#2ecc71",
             fg="white",
@@ -212,27 +249,58 @@ class SetupWizard:
 
     def _refresh_mics(self):
         try:
-            devices = AudioRecorder.list_devices()
-            self._mic_combo["values"] = devices
-            if devices:
+            raw_devices = AudioRecorder.list_devices()
+            if sys.platform == "darwin":
+                self._device_map = {name: idx for idx, name in raw_devices}
+                display_names = [name for _, name in raw_devices]
+            else:
+                self._device_map = {d: d for d in raw_devices}
+                display_names = raw_devices
+
+            self._mic_combo["values"] = display_names
+            if display_names:
                 self._mic_combo.current(0)
+
+            if sys.platform == "darwin" and display_names:
+                has_blackhole = any("blackhole" in n.lower() for n in display_names)
+                if not has_blackhole:
+                    tk.Label(
+                        self._frame,
+                        text="ヒント: オンラインモードにはBlackHoleが必要です\n"
+                             "  brew install blackhole-2ch",
+                        font=(_FONT_FAMILY, 8),
+                        fg="orange",
+                        justify="left",
+                    ).pack(anchor="w", pady=(2, 0))
         except Exception:
+            self._device_map = {}
             self._mic_combo["values"] = ["(デバイスを検出できません)"]
 
     def _save(self):
+        import shutil
+        if not shutil.which("ffmpeg"):
+            messagebox.showwarning(
+                "FFmpeg未検出",
+                "FFmpegがインストールされていません。\n"
+                + ("brew install ffmpeg を実行してください。" if sys.platform == "darwin"
+                   else "FFmpegをダウンロードしてPATHに追加してください。"),
+            )
+            return
+
         api_key = self._api_key_var.get().strip()
         if not api_key:
             messagebox.showwarning("入力エラー", "Gemini APIキーを入力してください。")
             return
 
-        mic = self._mic_var.get()
-        if not mic or mic.startswith("("):
+        mic_display = self._mic_var.get()
+        if not mic_display or mic_display.startswith("("):
             messagebox.showwarning("入力エラー", "マイクデバイスを選択してください。")
             return
 
+        mic_value = self._device_map.get(mic_display, mic_display)
         self._config.set("gemini_api_key", api_key)
         self._config.set("storage_provider", self._storage_var.get())
-        self._config.set("mic_device", mic)
+        self._config.set("mic_device", mic_value)
         self._config.set("setup_complete", True)
 
         self._root.destroy()

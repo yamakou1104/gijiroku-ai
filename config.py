@@ -1,6 +1,11 @@
-# config.py
 import json
+import logging
 import os
+import shutil
+import tempfile
+import threading
+
+logger = logging.getLogger(__name__)
 
 DEFAULTS = {
     "storage_provider": "google_drive",
@@ -12,6 +17,7 @@ DEFAULTS = {
     "onedrive_credentials": "",
 }
 
+
 class Config:
     def __init__(self, path=None):
         if path is None:
@@ -19,20 +25,36 @@ class Config:
             os.makedirs(app_dir, exist_ok=True)
             path = os.path.join(app_dir, "config.json")
         self._path = path
+        self._lock = threading.Lock()
         self._data = dict(DEFAULTS)
         if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                self._data.update(json.load(f))
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    self._data.update(json.load(f))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning("Config file corrupted, backing up: %s", e)
+                backup = path + ".bak"
+                shutil.copy2(path, backup)
+                self._save()
         else:
             self._save()
 
     def get(self, key):
-        return self._data.get(key)
+        with self._lock:
+            return self._data.get(key)
 
     def set(self, key, value):
-        self._data[key] = value
-        self._save()
+        with self._lock:
+            self._data[key] = value
+            self._save()
 
     def _save(self):
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2, ensure_ascii=False)
+        dir_name = os.path.dirname(self._path)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, self._path)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise

@@ -1,5 +1,8 @@
+import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
+
 from config import Config
 from recorder.audio import AudioRecorder
 from recorder.screen import ScreenRecorder
@@ -9,6 +12,24 @@ from uploader.google_drive import GoogleDriveUploader
 from uploader.onedrive import OneDriveUploader
 from utils.file_manager import FileManager
 from pipeline import Pipeline
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging():
+    log_dir = os.path.expanduser("~/.gijiroku-ai")
+    os.makedirs(log_dir, exist_ok=True)
+    handler = RotatingFileHandler(
+        os.path.join(log_dir, "app.log"),
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[handler, logging.StreamHandler()],
+    )
 
 
 def _build_components(config):
@@ -44,17 +65,23 @@ def _build_components(config):
 
     def uploader_factory():
         from utils.resource_path import get_credentials_dir
+
         provider = config.get("storage_provider")
         if provider == "google_drive":
             creds_path = config.get("google_drive_credentials")
             if not creds_path:
-                creds_path = os.path.join(get_credentials_dir(), "google_client_secrets.json")
+                creds_path = os.path.join(
+                    get_credentials_dir(), "google_client_secrets.json"
+                )
             uploader = GoogleDriveUploader(credentials_path=creds_path)
         else:
             client_id = config.get("onedrive_credentials")
             if not client_id:
                 import json
-                od_config_path = os.path.join(get_credentials_dir(), "onedrive_config.json")
+
+                od_config_path = os.path.join(
+                    get_credentials_dir(), "onedrive_config.json"
+                )
                 with open(od_config_path) as f:
                     client_id = json.load(f)["client_id"]
             uploader = OneDriveUploader(client_id=client_id)
@@ -73,6 +100,7 @@ def _build_components(config):
 
 def _launch_tray(config):
     from tray.app import TrayApp
+
     recorder_factory, pipeline = _build_components(config)
     app = TrayApp(
         config=config,
@@ -84,6 +112,7 @@ def _launch_tray(config):
 
 def _launch_gui(config):
     from ui.app import App
+
     recorder_factory, pipeline = _build_components(config)
     app = App(
         config=config,
@@ -94,11 +123,15 @@ def _launch_gui(config):
 
 
 def main():
+    _setup_logging()
+    logger.info("議事録AI starting")
+
     config = Config()
     use_gui = "--gui" in sys.argv
 
     if not config.get("setup_complete"):
         from ui.setup import SetupWizard
+
         if use_gui:
             wizard = SetupWizard(config, on_complete=lambda: _launch_gui(config))
         else:

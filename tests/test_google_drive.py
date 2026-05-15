@@ -27,8 +27,8 @@ def test_upload_file(uploader, tmp_path):
     test_file = tmp_path / "test.wav"
     test_file.write_bytes(b"\x00" * 100)
 
-    mock_create = uploader._service.files.return_value.create
-    mock_create.return_value.execute.return_value = {"id": "file-456"}
+    mock_request = uploader._service.files.return_value.create.return_value
+    mock_request.next_chunk.return_value = (None, {"id": "file-456"})
     file_id = uploader.upload_file(str(test_file), "parent-123")
     assert file_id == "file-456"
 

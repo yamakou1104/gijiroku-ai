@@ -1,10 +1,18 @@
+import logging
+
 import google.generativeai as genai
+
+from utils.retry import retry
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiTranscriber:
     MODEL = "gemini-2.5-flash"
 
     def __init__(self, api_key):
+        if not api_key:
+            raise ValueError("Gemini APIキーが空です")
         self._api_key = api_key
         genai.configure(api_key=api_key)
 
@@ -23,20 +31,44 @@ class GeminiTranscriber:
 
     def transcribe_segment(self, audio_path):
         model = genai.GenerativeModel(self.MODEL)
-        audio_file = genai.upload_file(audio_path)
-        response = model.generate_content([
-            self._build_transcription_prompt(),
-            audio_file,
-        ])
-        return response.text
+        audio_file = None
+        try:
+            audio_file = retry(
+                lambda: genai.upload_file(audio_path),
+                max_retries=3,
+                retryable_exceptions=(Exception,),
+            )
+            response = retry(
+                lambda: model.generate_content([
+                    self._build_transcription_prompt(),
+                    audio_file,
+                ]),
+                max_retries=3,
+                retryable_exceptions=(Exception,),
+            )
+            if not response.candidates:
+                logger.warning("Safety filter triggered for %s", audio_path)
+                return f"[文字起こし不可: セーフティフィルターにより除外 — {audio_path}]"
+            return response.text
+        finally:
+            if audio_file:
+                try:
+                    genai.delete_file(audio_file.name)
+                except Exception:
+                    logger.warning("Failed to delete uploaded file: %s", audio_path)
 
     def transcribe_all(self, segment_paths, segment_duration=1800):
         all_text = []
         for i, path in enumerate(segment_paths):
             offset_minutes = (i * segment_duration) // 60
-            text = self.transcribe_segment(path)
-            adjusted = self._adjust_timestamps(text, offset_minutes)
-            all_text.append(adjusted)
+            logger.info("Transcribing segment %d/%d: %s", i + 1, len(segment_paths), path)
+            try:
+                text = self.transcribe_segment(path)
+                adjusted = self._adjust_timestamps(text, offset_minutes)
+                all_text.append(adjusted)
+            except Exception as e:
+                logger.error("Segment %d failed: %s", i, e)
+                all_text.append(f"[セグメント {i} の文字起こしに失敗: {e}]")
         return "\n\n".join(all_text)
 
     def _adjust_timestamps(self, text, offset_minutes):
@@ -45,11 +77,18 @@ class GeminiTranscriber:
         lines = []
         for line in text.splitlines():
             if line.startswith("["):
-                bracket_end = line.index("]")
+                bracket_end = line.find("]")
+                if bracket_end == -1:
+                    lines.append(line)
+                    continue
                 ts = line[1:bracket_end]
                 parts = ts.split(":")
                 if len(parts) == 2:
-                    m, s = int(parts[0]), int(parts[1])
+                    try:
+                        m, s = int(parts[0]), int(parts[1])
+                    except ValueError:
+                        lines.append(line)
+                        continue
                     total = m + offset_minutes
                     h = total // 60
                     m = total % 60

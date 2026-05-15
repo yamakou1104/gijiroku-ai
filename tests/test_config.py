@@ -34,3 +34,35 @@ def test_persistence(config_path):
 def test_get_unknown_key_returns_none(config_path):
     cfg = Config(config_path)
     assert cfg.get("nonexistent") is None
+
+
+def test_load_corrupted_json(config_path):
+    with open(config_path, "w") as f:
+        f.write("{invalid json")
+    cfg = Config(config_path)
+    assert cfg.get("storage_provider") == "google_drive"
+    assert os.path.exists(config_path + ".bak")
+
+
+def test_thread_safe_set(config_path):
+    import threading
+    cfg = Config(config_path)
+    errors = []
+
+    def writer(key, value):
+        try:
+            for _ in range(50):
+                cfg.set(key, value)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=writer, args=("key1", "val1")),
+        threading.Thread(target=writer, args=("key2", "val2")),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors

@@ -1,10 +1,12 @@
-from plyer import notification as plyer_notification
-
-
 def notify(title, message, timeout=10):
-    plyer_notification.notify(
-        title=title,
-        message=message,
-        app_name="議事録AI",
-        timeout=timeout,
-    )
+    try:
+        from plyer import notification as plyer_notification
+
+        plyer_notification.notify(
+            title=title,
+            message=message,
+            app_name="議事録AI",
+            timeout=timeout,
+        )
+    except Exception:
+        print(f"[通知] {title}: {message}")

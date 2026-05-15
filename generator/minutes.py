@@ -1,9 +1,18 @@
+import logging
+
 import google.generativeai as genai
+
+from utils.retry import retry
+
+logger = logging.getLogger(__name__)
+
 
 class MinutesGenerator:
     MODEL = "gemini-2.5-flash"
 
     def __init__(self, api_key):
+        if not api_key:
+            raise ValueError("Gemini APIキーが空です")
         self._api_key = api_key
         genai.configure(api_key=api_key)
 
@@ -42,7 +51,20 @@ class MinutesGenerator:
         )
 
     def generate(self, transcript):
+        if not transcript or not transcript.strip():
+            raise ValueError("文字起こしテキストが空です")
+
         model = genai.GenerativeModel(self.MODEL)
         prompt = self._build_generation_prompt(transcript)
-        response = model.generate_content(prompt)
+
+        response = retry(
+            lambda: model.generate_content(prompt),
+            max_retries=3,
+            retryable_exceptions=(Exception,),
+        )
+
+        if not response.candidates:
+            logger.warning("Safety filter triggered during minutes generation")
+            return "# 議事録生成失敗\n\nセーフティフィルターにより生成がブロックされました。"
+
         return response.text

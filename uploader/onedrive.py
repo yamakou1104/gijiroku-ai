@@ -1,11 +1,23 @@
-import os
 import json
-import requests
+import logging
+import os
+import tempfile
+from urllib.parse import quote
+
 import msal
+import requests
+
+from exceptions import AuthenticationError, NetworkError, UploadError
 from uploader.base import BaseUploader
+from utils.retry import retry
+
+logger = logging.getLogger(__name__)
 
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Files.ReadWrite"]
+SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024
+CHUNK_SIZE = 3276800
+
 
 class OneDriveUploader(BaseUploader):
     def __init__(self, client_id, authority=None, token_cache_path=None):
@@ -13,14 +25,21 @@ class OneDriveUploader(BaseUploader):
         self._authority = authority or "https://login.microsoftonline.com/consumers"
         if token_cache_path is None:
             from utils.resource_path import get_app_data_dir
-            token_cache_path = os.path.join(get_app_data_dir(), "onedrive_token_cache.json")
+
+            token_cache_path = os.path.join(
+                get_app_data_dir(), "onedrive_token_cache.json"
+            )
         self._token_cache_path = token_cache_path
         self._access_token = None
 
     def authenticate(self):
         cache = msal.SerializableTokenCache()
         if self._token_cache_path and os.path.exists(self._token_cache_path):
-            cache.deserialize(open(self._token_cache_path).read())
+            try:
+                with open(self._token_cache_path, "r") as f:
+                    cache.deserialize(f.read())
+            except Exception as e:
+                logger.warning("Token cache corrupted: %s", e)
 
         app = msal.PublicClientApplication(
             self._client_id,
@@ -29,51 +48,147 @@ class OneDriveUploader(BaseUploader):
         )
 
         accounts = app.get_accounts()
+        result = None
         if accounts:
             result = app.acquire_token_silent(SCOPES, account=accounts[0])
-        else:
-            result = None
 
         if not result:
             flow = app.initiate_device_flow(scopes=SCOPES)
+            if "user_code" not in flow:
+                raise AuthenticationError(
+                    f"デバイスフロー開始エラー: {flow.get('error_description', '不明')}"
+                )
             print(flow["message"])
             result = app.acquire_token_by_device_flow(flow)
+
+        if "access_token" not in result:
+            raise AuthenticationError(
+                f"認証失敗: {result.get('error_description', '不明')}"
+            )
 
         self._access_token = result["access_token"]
 
         if self._token_cache_path and cache.has_state_changed:
-            with open(self._token_cache_path, "w") as f:
-                f.write(cache.serialize())
+            dir_name = os.path.dirname(self._token_cache_path)
+            os.makedirs(dir_name, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(cache.serialize())
+                os.replace(tmp, self._token_cache_path)
+            except BaseException:
+                os.unlink(tmp)
+                raise
 
     def _headers(self):
         return {"Authorization": f"Bearer {self._access_token}"}
 
     def create_folder(self, name, parent_path=None):
-        parent = parent_path or "/drive/root:"
-        url = f"{GRAPH_URL}/me{parent}:/children"
+        if parent_path:
+            url = f"{GRAPH_URL}/me/drive/root:{quote(parent_path, safe='/')}:/children"
+        else:
+            url = f"{GRAPH_URL}/me/drive/root/children"
         body = {
             "name": name,
             "folder": {},
             "@microsoft.graph.conflictBehavior": "rename",
         }
-        resp = requests.post(url, headers=self._headers(), json=body)
+        resp = requests.post(
+            url, headers=self._headers(), json=body, timeout=(10, 30)
+        )
         resp.raise_for_status()
         return resp.json()["id"]
 
     def upload_file(self, file_path, parent_path):
+        file_size = os.path.getsize(file_path)
+        if file_size <= SIMPLE_UPLOAD_LIMIT:
+            return self._upload_simple(file_path, parent_path)
+        return self._upload_session(file_path, parent_path)
+
+    def _upload_simple(self, file_path, parent_path):
         filename = os.path.basename(file_path)
-        url = f"{GRAPH_URL}/me/drive/root:{parent_path}/{filename}:/content"
+        url = (
+            f"{GRAPH_URL}/me/drive/root:"
+            f"{quote(parent_path, safe='/')}/{quote(filename)}:/content"
+        )
         with open(file_path, "rb") as f:
-            resp = requests.put(url, headers=self._headers(), data=f)
+            resp = requests.put(
+                url, headers=self._headers(), data=f, timeout=(10, 300)
+            )
         resp.raise_for_status()
         return resp.json()["id"]
 
+    def _upload_session(self, file_path, parent_path):
+        filename = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+
+        create_url = (
+            f"{GRAPH_URL}/me/drive/root:"
+            f"{quote(parent_path, safe='/')}/{quote(filename)}:/createUploadSession"
+        )
+        body = {
+            "item": {
+                "@microsoft.graph.conflictBehavior": "rename",
+                "name": filename,
+            }
+        }
+        resp = requests.post(
+            create_url, headers=self._headers(), json=body, timeout=(10, 30)
+        )
+        resp.raise_for_status()
+        upload_url = resp.json()["uploadUrl"]
+
+        with open(file_path, "rb") as f:
+            offset = 0
+            while offset < file_size:
+                chunk_end = min(offset + CHUNK_SIZE, file_size) - 1
+                chunk_data = f.read(CHUNK_SIZE)
+                headers = {
+                    "Content-Range": f"bytes {offset}-{chunk_end}/{file_size}",
+                    "Content-Length": str(len(chunk_data)),
+                }
+
+                chunk_resp = retry(
+                    lambda: requests.put(
+                        upload_url,
+                        headers=headers,
+                        data=chunk_data,
+                        timeout=(10, 300),
+                    ),
+                    max_retries=5,
+                    initial_delay=2,
+                    retryable_exceptions=(
+                        requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout,
+                    ),
+                )
+
+                if chunk_resp.status_code not in (200, 201, 202):
+                    raise UploadError(
+                        f"チャンクアップロード失敗: {chunk_resp.status_code} {chunk_resp.text}"
+                    )
+
+                progress = int((chunk_end + 1) / file_size * 100)
+                logger.info("Upload %s: %d%%", filename, progress)
+                offset += CHUNK_SIZE
+
+        return chunk_resp.json().get("id", "")
+
     def upload_session(self, session_dir, meeting_name):
-        root_path = "/drive/root:/議事録AI"
+        root_path = "/議事録AI"
         self.create_folder("議事録AI")
         folder_path = f"/議事録AI/{meeting_name}"
         self.create_folder(meeting_name, root_path)
+        failed = []
         for filename in os.listdir(session_dir):
             filepath = os.path.join(session_dir, filename)
             if os.path.isfile(filepath):
-                self.upload_file(filepath, folder_path)
+                try:
+                    self.upload_file(filepath, folder_path)
+                except Exception as e:
+                    logger.error("Failed to upload %s: %s", filename, e)
+                    failed.append(filename)
+        if failed:
+            raise UploadError(
+                f"以下のファイルのアップロードに失敗: {', '.join(failed)}"
+            )

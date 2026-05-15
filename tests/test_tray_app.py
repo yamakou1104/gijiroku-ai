@@ -73,7 +73,7 @@ def test_processing_completes_returns_to_idle():
     app._session_dir = "/tmp/test"
     app._pipeline.run.return_value = None
 
-    app.tick()
+    app._run_pipeline()
     assert app.state == State.IDLE
 
 def test_manual_face_to_face_starts_recording():
@@ -89,4 +89,34 @@ def test_manual_stop_from_recording():
     assert app.state == State.RECORDING
 
     app.manual_stop()
-    assert app.state == State.PROCESSING
+    assert app.state == State.IDLE
+
+
+def test_quit_stops_recorder():
+    app = make_tray_app()
+    app._monitor.detect.return_value = True
+    app.tick()
+    assert app.state == State.RECORDING
+
+    app.quit()
+    app._recorder_factory.return_value[0].stop.assert_called()
+
+
+def test_pipeline_error_returns_to_idle():
+    app = make_tray_app()
+    app._state = State.PROCESSING
+    app._session_dir = "/tmp/test"
+    app._pipeline.run.side_effect = Exception("test error")
+
+    app._run_pipeline()
+    assert app.state == State.IDLE
+
+
+def test_start_face_to_face_noop_when_recording():
+    app = make_tray_app()
+    app._monitor.detect.return_value = True
+    app.tick()
+    assert app.state == State.RECORDING
+
+    app.start_face_to_face()
+    assert app._recorder_factory.call_count == 1
