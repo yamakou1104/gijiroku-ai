@@ -235,7 +235,7 @@ class SetupWizard:
                 "credentials/README.md を参照してください。"
             )
 
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             od_config = json.load(f)
 
         app_data = get_app_data_dir()

@@ -15,6 +15,7 @@ DEFAULTS = {
     "output_dir": "",
     "google_drive_credentials": "",
     "onedrive_credentials": "",
+    "setup_complete": False,
 }
 
 

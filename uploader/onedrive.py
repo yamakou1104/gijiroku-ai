@@ -205,3 +205,4 @@ class OneDriveUploader(BaseUploader):
             raise UploadError(
                 f"以下のファイルのアップロードに失敗: {', '.join(failed)}"
             )
+        return folder_path

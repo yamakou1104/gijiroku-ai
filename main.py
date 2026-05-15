@@ -112,7 +112,7 @@ def _build_components(config):
                 od_config_path = os.path.join(
                     get_credentials_dir(), "onedrive_config.json"
                 )
-                with open(od_config_path) as f:
+                with open(od_config_path, encoding="utf-8") as f:
                     client_id = json.load(f)["client_id"]
             uploader = OneDriveUploader(client_id=client_id)
         uploader.authenticate()

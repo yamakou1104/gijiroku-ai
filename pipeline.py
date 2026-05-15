@@ -122,9 +122,13 @@ class Pipeline:
         path = os.path.join(session_dir, "pipeline_state.json")
         dir_name = os.path.dirname(path)
         fd, tmp = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, path)
+        except BaseException:
+            os.unlink(tmp)
+            raise
 
     @staticmethod
     def _atomic_write(path, content):
