@@ -125,6 +125,7 @@ class AudioRecorder:
                     ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
                     capture_output=True,
                     text=True,
+                    timeout=10,
                 )
                 devices = []
                 in_audio_section = False
@@ -145,6 +146,7 @@ class AudioRecorder:
                     ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
                     capture_output=True,
                     text=True,
+                    timeout=10,
                 )
                 devices = []
                 for line in result.stderr.splitlines():

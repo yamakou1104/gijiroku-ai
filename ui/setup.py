@@ -172,9 +172,10 @@ class SetupWizard:
         )
         self._mic_combo.pack(anchor="w", pady=(0, 5))
 
-        tk.Button(frame, text="マイク一覧を更新", command=self._refresh_mics).pack(
-            anchor="w"
+        self._mic_refresh_btn = tk.Button(
+            frame, text="マイク一覧を更新", command=self._refresh_mics
         )
+        self._mic_refresh_btn.pack(anchor="w")
 
         # Save button
         tk.Button(
@@ -201,8 +202,10 @@ class SetupWizard:
             self._auth_status.config(text="✓ 連携済み", fg="green")
 
     def _authenticate_storage(self):
+        logger.info("_authenticate_storage called")
         provider = self._storage_var.get()
         self._auth_btn.config(state="disabled", text="認証中...")
+        self._auth_status.config(text="認証中...", fg="gray")
 
         def auth_thread():
             try:
@@ -215,10 +218,10 @@ class SetupWizard:
                     lambda: self._auth_status.config(text="✓ 連携済み", fg="green"),
                 )
             except Exception as e:
-                err_msg = f"認証に失敗しました:\n{e}"
+                err_msg = str(e)
                 self._root.after(
                     0,
-                    lambda: messagebox.showerror("認証エラー", err_msg),
+                    lambda: self._auth_status.config(text=f"✗ {err_msg}", fg="red"),
                 )
             finally:
                 self._root.after(
@@ -297,6 +300,10 @@ class SetupWizard:
         self._config.set("onedrive_token_cache", cache_path)
 
     def _refresh_mics(self):
+        logger.info("_refresh_mics called")
+        if hasattr(self, "_mic_refresh_btn"):
+            self._mic_refresh_btn.config(state="disabled", text="検索中...")
+            self._root.update_idletasks()
         try:
             raw_devices = AudioRecorder.list_devices()
             if sys.platform == "darwin":
@@ -331,6 +338,9 @@ class SetupWizard:
         except Exception:
             self._device_map = {}
             self._mic_combo["values"] = ["(デバイスを検出できません)"]
+        finally:
+            if hasattr(self, "_mic_refresh_btn"):
+                self._mic_refresh_btn.config(state="normal", text="マイク一覧を更新")
 
     def _save(self):
         import shutil
