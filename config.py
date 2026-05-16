@@ -40,6 +40,16 @@ class Config:
         else:
             self._save()
 
+    def reload(self):
+        with self._lock:
+            if os.path.exists(self._path):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        self._data = dict(DEFAULTS)
+                        self._data.update(json.load(f))
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning("Config reload failed, keeping current data: %s", e)
+
     def get(self, key):
         with self._lock:
             return self._data.get(key)

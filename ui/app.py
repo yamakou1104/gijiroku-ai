@@ -1,11 +1,15 @@
 import logging
+import os
+import subprocess
 import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox
 
+from dotenv import load_dotenv
 from ui.setup import _schedule_activate
 from ui.widgets import ModeButton, StatusBar, StorageSelector
+from utils.resource_path import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +24,7 @@ class App:
         self._recorder = None
         self._session_dir = None
         self._root = None
+        self._settings_open = False
 
     def run(self):
         self._root = tk.Tk()
@@ -41,6 +46,12 @@ class App:
 
         self._status_bar = StatusBar(title_frame)
         self._status_bar.pack(side="right", padx=20)
+
+        self._settings_btn = tk.Button(
+            title_frame, text="設定", font=(_FONT_FAMILY, 10),
+            command=self._open_settings,
+        )
+        self._settings_btn.pack(side="right")
 
         self._storage_selector = StorageSelector(
             self._root, on_change=self._on_storage_change
@@ -81,6 +92,41 @@ class App:
         )
         self._stop_btn.pack(fill="x", padx=20, pady=15)
 
+    def _open_settings(self):
+        if self._settings_open:
+            return
+
+        self._settings_open = True
+        self._settings_btn.configure(state="disabled")
+
+        def _run():
+            proc = subprocess.Popen([
+                sys.executable, "-c",
+                "from config import Config; from ui.setup import SetupWizard; "
+                "SetupWizard(Config(), on_complete=lambda: None).run()"
+            ])
+            proc.wait()
+            if self._root and self._root.winfo_exists():
+                self._root.after(0, self._reload_after_settings)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _reload_after_settings(self):
+        load_dotenv(os.path.join(get_app_data_dir(), ".env"), override=True)
+        self._config.reload()
+        self._storage_selector.value = self._config.get("storage_provider")
+
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if api_key:
+            from transcriber.gemini import GeminiTranscriber
+            from generator.minutes import MinutesGenerator
+            self._pipeline.update_transcriber(GeminiTranscriber(api_key=api_key))
+            self._pipeline.update_generator(MinutesGenerator(api_key=api_key))
+
+        self._settings_open = False
+        self._settings_btn.configure(state="normal")
+        self._status_bar.set_status("設定を更新しました")
+
     def _on_storage_change(self, value):
         self._config.set("storage_provider", value)
 
@@ -110,6 +156,7 @@ class App:
         self._stop_btn.configure(state="normal")
         self._face_btn.configure(state="disabled")
         self._online_btn.configure(state="disabled")
+        self._settings_btn.configure(state="disabled")
 
     def _stop_and_generate(self):
         if self._recorder is None:
@@ -148,6 +195,7 @@ class App:
         self._stop_btn.configure(state="disabled")
         self._face_btn.configure(state="normal")
         self._online_btn.configure(state="normal")
+        self._settings_btn.configure(state="normal")
         self._recorder = None
         self._session_dir = None
 

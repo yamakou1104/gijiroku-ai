@@ -24,6 +24,12 @@ class Pipeline:
         self._generator = generator
         self._uploader_factory = uploader_factory
 
+    def update_transcriber(self, transcriber):
+        self._transcriber = transcriber
+
+    def update_generator(self, generator):
+        self._generator = generator
+
     def run(self, session_dir, on_status=None):
         def status(msg):
             logger.info(msg)
