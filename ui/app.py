@@ -181,12 +181,11 @@ class App:
 
         except Exception as e:
             logger.exception("Pipeline failed")
+            err_msg = f"処理中にエラーが発生しました:\n{e}"
             if self._root and self._root.winfo_exists():
                 self._root.after(
                     0,
-                    lambda: messagebox.showerror(
-                        "エラー", f"処理中にエラーが発生しました:\n{e}"
-                    ),
+                    lambda: messagebox.showerror("エラー", err_msg),
                 )
                 self._root.after(0, self._reset_ui)
 

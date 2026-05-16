@@ -215,9 +215,10 @@ class SetupWizard:
                     lambda: self._auth_status.config(text="✓ 連携済み", fg="green"),
                 )
             except Exception as e:
+                err_msg = f"認証に失敗しました:\n{e}"
                 self._root.after(
                     0,
-                    lambda: messagebox.showerror("認証エラー", f"認証に失敗しました:\n{e}"),
+                    lambda: messagebox.showerror("認証エラー", err_msg),
                 )
             finally:
                 self._root.after(
